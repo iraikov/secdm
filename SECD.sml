@@ -24,14 +24,17 @@
 structure SECD =
 struct
 
+open Symbol
+
 type 'a lazy = unit -> 'a
 fun force (f:'a lazy) = f () 
 
-type var = string
+type var = symbol
 
 datatype expr =
     Int    of int
   | Bool   of bool
+  | Real   of real
   | Con    of var * expr list
   | Var    of var
   | Label  of var
@@ -49,10 +52,6 @@ withtype env  = (var * expr) list
 
 
 exception NotFound of var
-
-fun ins l E = l@E
-fun lookup (x,(y,e)::E) = if x=y then e else lookup (x,E)
-  | lookup (x,[]) = raise NotFound x
 
 
 
@@ -73,7 +72,10 @@ fun apply2 "+" (Int x,Int y) = Int (x+y)
  |  apply2 "=" (Int x,Int y) = Bool (x=y)
  |  apply2 "=" (Bool x,Bool y) = Bool (x=y)
  |  apply2 "=" (Con (c,l), Con (c',l')) = Bool (c=c' andalso alleq (l,l'))
- |  apply2 "rsel"  (Label fld, Con ("$",rst)) = rsel fld rst
+ |  apply2 "rsel"  (Label fld, Con (c,rst)) = 
+    (case compare (c, symbol "$") of
+         EQUAL => rsel fld rst
+       | _ => raise Eval)
  |  apply2 _ _ = raise Eval
 
 and rsel fld (Con (fld',[v]) :: rst) =
@@ -110,51 +112,17 @@ and eval (Int i)           E = Int i
     in
         case v of
             Clos (Abs (x,e''),E') =>
-            eval e'' (ins [(x,eval e' E)] (force E'))
+            eval e'' (enter (x,eval e' E,force E'))
           | _ => raise Eval
     end
  |  eval (Abs (x,e))       E = Clos (Abs (x,e),fn ()=>E)
- |  eval (Let (x,e,e'))    E = eval e' (ins [(x,eval e E)] E)
+ |  eval (Let (x,e,e'))    E = eval e' (enter (x,eval e E,E))
  |  eval (LetRec (d,e))    E = 
-         let fun NewE () = ins (map (def E NewE) d) E
+         let fun NewE () = enter' (map (def E NewE) d, E)
           in
              eval e (force NewE)
          end
  | eval  _ _ = raise Eval
-
-
-(* examples *)
-
-(* simple functions *)
-val suc   = Abs ("x",BinOp ("+",Var "x",Int 1));
-val pred  = Abs ("x",BinOp ("-",Var "x",Int 1));
-val plus  = Abs ("x",Abs ("y",BinOp ("+",Var "x",Var "y")));
-val twice = Abs ("f",Abs ("x",App (Var "f", App (Var "f",Var "x"))));
-val comp  = Abs ("f",Abs ("g",Abs ("x",App (Var "f", App (Var "g",Var "x")))));
-
-val recd  = BinOp ("rsel",
-                   Label "x", 
-                   Con ("$", [Con ("x",[BinOp ("+",Int 1,Int 2)]),
-                              Con ("y",[BinOp ("+",Int 3,Int 4)])]))
-
-val _ = eval recd []
-
-(* recursive functions *)
-val fak   = LetRec (
-             [("f",Abs ("x",Cond (BinOp ("<",Var "x",Int 2),Int 1,
-                             BinOp ("*",Var "x", 
-                               App (Var "f",BinOp("-",Var "x",Int 1))))))],
-             Var "f")
-val foldri = LetRec (
-             [("g",Abs ("f", Abs ("u", Abs ("l",
-                   Cond (BinOp ("=",Var "l",Con ("nil",[])),
-                               Var "u",
-                               App (App (Var "f",UnOp ("hd",Var "l")),
-                                    App (App (App (Var "g",Var "f"),Var "u"),
-                                         UnOp ("tl",Var "l"))
-                                      ))))))],
-             Var "g")
-;
 
 
 
@@ -175,6 +143,7 @@ fun norm (Val x) = x
 datatype value =
     I  of int
   | B  of bool
+  | R  of real
   | T  of string * value list
   | CL of code list * value dummy list
   | UNDEF
@@ -191,6 +160,14 @@ and code =
   | COND of code list * code list
   | RET (* pops one return value from the stack, restores S, E, and C from the dump *)
   | ADD | SUB | MULT | NOT | EQ | LT | GT | HD | TL | RSEL of string
+
+fun vequal (I i, I i') = i=i'
+  | vequal (B b, B b') = b=b'
+  | vequal (R r, R r') = (Real.== (r,r'))
+  | vequal (T (s,vs), T (s',vs')) =
+    (s=s' andalso ListPair.allEq vequal (vs,vs') )
+  | vequal (UNDEF, UNDEF) = true
+  | vequal (_, _) = false
 
 
 
@@ -229,6 +206,9 @@ fun rselv fld (T (fld',[v]) :: rst) =
 
 exception Machine
 
+fun checkTuple (c, sym) = case compare (c,sym) of
+                              EQUAL => ()
+                            | _ => raise Machine
 
 fun step (S,E,LD  x::C,D)                 = (x::S,E,C,D)
  |  step (S,E,LDV k::C,D)                 = (norm (index k E)::S,E,C,D)
@@ -241,11 +221,11 @@ fun step (S,E,LD  x::C,D)                 = (x::S,E,C,D)
  |  step (I y::I x::S,E,MULT::C,D)        = (I (x*y)::S,E,C,D)
  |  step (I y::I x::S,E,  LT::C,D)        = (B (x<y)::S,E,C,D)
  |  step (I y::I x::S,E,  GT::C,D)        = (B (x>y)::S,E,C,D)
- |  step (y::x::S,E,      EQ::C,D)        = (B (x=y)::S,E,C,D)
+ |  step (y::x::S,E,      EQ::C,D)        = (B (vequal (x,y))::S,E,C,D)
  |  step (B x::S,E,      NOT::C,D)        = (B (not x)::S,E,C,D)
- |  step (T ("cons",[x,y])::S,E,HD::C,D)  = (x::S,E,C,D)
- |  step (T ("cons",[x,y])::S,E,TL::C,D)  = (y::S,E,C,D)
- |  step (T ("$",rst)::S,E,(RSEL s)::C,D) = ((rselv s rst)::S,E,C,D)
+ |  step (T (c,[x,y])::S,E,HD::C,D)       = (checkTuple (c, symbol "cons"); (x::S,E,C,D))
+ |  step (T (c,[x,y])::S,E,TL::C,D)       = (checkTuple (c, symbol "cons"); (y::S,E,C,D))
+ |  step (T (c,rst)::S,E,(RSEL s)::C,D)   = (checkTuple (c, symbol "$"); ((rselv s rst)::S,E,C,D))
  |  step (B true::S, E,COND (C1,C2)::C,D) = (S,E,C1,([],[],C)::D)
  |  step (B false::S,E,COND (C1,C2)::C,D) = (S,E,C2,([],[],C)::D)
  |  step (S,E,[RET],(_,_,C)::D)           = (S,E,C,D)
@@ -263,18 +243,18 @@ fun secd C = loop ([],[],C,[])
 
 (* SECD compiler *)
 
-exception Cmd
+exception Prim
 
-fun cmd "+"   = ADD
- |  cmd "-"   = SUB
- |  cmd "*"   = MULT
- |  cmd "="   = EQ
- |  cmd ">"   = GT
- |  cmd "<"   = LT
- |  cmd "not" = NOT
- |  cmd "hd"  = HD
- |  cmd "tl"  = TL
- |  cmd _     = raise Cmd
+fun prim "+"   = ADD
+ |  prim "-"   = SUB
+ |  prim "*"   = MULT
+ |  prim "="   = EQ
+ |  prim ">"   = GT
+ |  prim "<"   = LT
+ |  prim "not" = NOT
+ |  prim "hd"  = HD
+ |  prim "tl"  = TL
+ |  prim _     = raise Prim
 
 fun position x (y::l) = 1+(if x=y then 0 else position x l)
   | position x _ = raise Match
@@ -285,12 +265,13 @@ exception Compiler
 
 fun compile (Int i)           N = [LD (I i)]
  |  compile (Bool b)          N = [LD (B b)]
+ |  compile (Real r)          N = [LD (R r)]
  |  compile (Var x)           N = [LDV (position x N)]
  |  compile (Con (c,l))       N = 
       listConcat (map (fn e=>compile e N) l)@[LDT (c,length l)]
- |  compile (UnOp (f,e))      N = compile e N@[cmd f]
+ |  compile (UnOp (f,e))      N = compile e N@[prim f]
  |  compile (BinOp ("rsel",Label s,e)) N = compile e N@[(RSEL s)]
- |  compile (BinOp (f,e1,e2)) N = compile e1 N@compile e2 N@[cmd f]
+ |  compile (BinOp (f,e1,e2)) N = compile e1 N@compile e2 N@[prim f]
  |  compile (Cond (e,e1,e2))  N = 
       compile e N@[COND (compile e1 N@[RET],compile e2 N@[RET])]
  |  compile (App (e,e'))      N = compile e' N@compile e N@[APP]

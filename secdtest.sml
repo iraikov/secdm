@@ -35,12 +35,14 @@ val recd  = BinOp ("rsel",
                    Con ("$", [Con ("x",[BinOp ("+",Int 1,Int 2)]),
                               Con ("y",[BinOp ("+",Int 3,Int 4)])]))
 
-val _ = eval suc []
-val _ = eval pred []
-val _ = eval plus []
-val _ = eval twice []
-val _ = eval comp []
-val _ = eval recd []
+val E = Symbol.empty
+
+val _ = eval suc E
+val _ = eval pred E
+val _ = eval plus E
+val _ = eval twice E
+val _ = eval comp E
+val _ = eval recd E
 val _ = compile recd
 
 (* recursive functions *)
@@ -59,6 +61,6 @@ val foldri = LetRec (
                                       ))))))],
              Var "g")
 
-val _ = eval fak []
-val _ = eval foldri []
+val _ = eval fak E
+val _ = eval foldri E
 
