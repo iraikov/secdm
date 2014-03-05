@@ -21,6 +21,9 @@
 
 *)
 
+structure SECD =
+struct
+
 type 'a lazy = unit -> 'a
 fun force (f:'a lazy) = f () 
 
@@ -303,4 +306,5 @@ fun compile (Int i)           N = [LD (I i)]
  |  compile (Clos (_,_))    N = raise Compiler
  |  compile (Label _)       N = raise Compiler
 
-val _ = compile recd
+
+end
