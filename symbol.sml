@@ -50,8 +50,8 @@ struct
 
   fun enter (s,v,t)  = Table.enter (t,s,v)
   fun enter' (lst,t) = foldl (fn ((s,v),t) => Table.enter (t,s,v)) t lst
-  fun lookup (s,t)  = Table.look (t,s)
-  fun remove (s,t)  = Table.remove (t,s)
+  fun lookup (s,t)   = Table.look (t,s)
+  fun remove (s,t)   = Table.remove (t,s)
 
   fun compare ((_,s1),(_,s2)) = Int.compare (s1,s2)
 end

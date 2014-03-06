@@ -23,17 +23,19 @@
 
 open SECD
 
-(* simple functions *)
-val suc   = Abs ("x",BinOp ("+",Var "x",Int 1));
-val pred  = Abs ("x",BinOp ("-",Var "x",Int 1));
-val plus  = Abs ("x",Abs ("y",BinOp ("+",Var "x",Var "y")));
-val twice = Abs ("f",Abs ("x",App (Var "f", App (Var "f",Var "x"))));
-val comp  = Abs ("f",Abs ("g",Abs ("x",App (Var "f", App (Var "g",Var "x")))));
+val $ = Symbol.symbol
 
-val recd  = BinOp ("rsel",
-                   Label "x", 
-                   Con ("$", [Con ("x",[BinOp ("+",Int 1,Int 2)]),
-                              Con ("y",[BinOp ("+",Int 3,Int 4)])]))
+(* simple functions *)
+val suc   = Abs ($ "x",BinOp ($ "+",Var ($ "x"),Int 1));
+val pred  = Abs ($ "x",BinOp ($ "-",Var ($ "x"),Int 1));
+val plus  = Abs ($ "x",Abs ($ "y",BinOp ($ "+",Var ($ "x"),Var ($ "y"))));
+val twice = Abs ($ "f",Abs ($ "x",App (Var ($ "f"), App (Var ($ "f"),Var ($ "x")))));
+val comp  = Abs ($ "f",Abs ($ "g",Abs ($ "x",App (Var ($ "f"), App (Var ($ "g"),Var ($ "x"))))));
+
+val recd  = BinOp ($ "rsel",
+                   Label ($ "x"), 
+                   Con ($ "$", [Con ($ "x",[BinOp ($ "+",Int 1,Int 2)]),
+                                Con ($ "y",[BinOp ($ "+",Int 3,Int 4)])]))
 
 val E = Symbol.empty
 
@@ -46,20 +48,23 @@ val _ = eval recd E
 val _ = compile recd
 
 (* recursive functions *)
-val fak   = LetRec (
-             [("f",Abs ("x",Cond (BinOp ("<",Var "x",Int 2),Int 1,
-                             BinOp ("*",Var "x", 
-                               App (Var "f",BinOp("-",Var "x",Int 1))))))],
-             Var "f")
-val foldri = LetRec (
-             [("g",Abs ("f", Abs ("u", Abs ("l",
-                   Cond (BinOp ("=",Var "l",Con ("nil",[])),
-                               Var "u",
-                               App (App (Var "f",UnOp ("hd",Var "l")),
-                                    App (App (App (Var "g",Var "f"),Var "u"),
-                                         UnOp ("tl",Var "l"))
+val fak   = LetRec 
+                (
+                 [($ "f",Abs ($ "x",Cond (BinOp ($ "<",Var ($ "x"),Int 2),Int 1,
+                                          BinOp ($ "*",Var ($ "x"), 
+                                                 App (Var ($ "f"),BinOp($ "-",Var ($ "x"),Int 1))))))],
+                 Var ($ "f")
+                )
+val foldri = LetRec 
+                 (
+                  [($ "g", Abs ($ "f", Abs ($ "u", Abs ($ "l", Cond (BinOp ($ "=",Var ($ "l"),Con ($ "nil",[])),
+                               Var ($ "u"),
+                               App (App (Var ($ "f"), UnOp ($ "hd", Var ($ "l"))),
+                                    App (App (App (Var ($ "g"), Var ($ "f")), Var ($ "u")),
+                                         UnOp ($ "tl", Var ($ "l")))
                                       ))))))],
-             Var "g")
+                  Var ($ "g")
+                 )
 
 val _ = eval fak E
 val _ = eval foldri E
