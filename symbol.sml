@@ -3,6 +3,7 @@ sig
   eqtype symbol
   val symbol : string -> symbol
   val name : symbol -> string
+  val toInt : symbol -> int
   type 'a table
   val empty : 'a table
   val remove : symbol * 'a table  -> 'a table * 'a
@@ -10,6 +11,7 @@ sig
   val enter' : (symbol * 'a) list * 'a table -> 'a table
   val lookup : symbol * 'a table  -> 'a option
   val listItems : 'a table -> 'a list
+  val listKeys : 'a table -> int list
   val map : ('a -> 'b) -> 'a table -> 'b table
   val compare     : symbol * symbol -> order
 
@@ -38,6 +40,7 @@ struct
 		  end
 
   fun name(s,n) = s
+  fun toInt(s,n) = n
 
   structure Table = IntMapTable (type key = symbol
 				 fun getInt(s,n) = n)
@@ -46,6 +49,7 @@ struct
   val empty = Table.empty
 
   val listItems = Table.listItems
+  val listKeys = Table.listKeys
   val map = Table.map
 
   fun enter (s,v,t)  = Table.enter (t,s,v)
