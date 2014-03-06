@@ -59,10 +59,21 @@ exception NotFound of var
 
 exception Eval
 
-fun apply1 "not" (Bool x)             = Bool (not x)
- |  apply1 "hd"  (Con ("cons",[x,y])) = x
- |  apply1 "tl"  (Con ("cons",[x,y])) = y
- |  apply1 _  _ = raise Eval
+fun withTuple (sym, f) (Con (c, args)) = 
+    (if c=sym then f args else raise Eval)
+    | withTuple (_, _) _ = raise Eval
+
+val apply1 = 
+    [
+      (symbol "not", 
+       fn (Bool x) => Bool (not x) | _ => raise Eval),
+      (symbol "hd",  
+       withTuple (symbol "cons", 
+                  fn ([x,y]) = x | _ => raise Eval)),
+      (symbol "tl",  
+       withTuple (symbol "cons", 
+                  fn ([x,y]) = y | _ => raise Eval))
+    ]
 
 fun apply2 "+" (Int x,Int y) = Int (x+y)
  |  apply2 "-" (Int x,Int y) = Int (x-y)
