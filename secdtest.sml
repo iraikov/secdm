@@ -21,9 +21,29 @@
 
 *)
 
+fun putStrLn (file, str) = 
+    (TextIO.output (file, str);
+     TextIO.output (file, "\n"))
+    
+fun putStr (file, str) = 
+    (TextIO.output (file, str))
+
 open SECD
 
 val $ = Symbol.symbol
+
+fun toInt v = case v of Int i => i | _ => raise Match
+
+fun myapp f lst = 
+    case lst of Con (c,[x,y]) => 
+                if c=($ "cons") 
+                then (f x; myapp f y) else raise Match
+              | Con (c,[]) =>
+                if c=($ "nil") then () else raise Match
+              | _ => raise Match
+                                     
+
+
 
 (* simple functions *)
 val suc   = Abs ($ "x",BinOp ($ "+",Var ($ "x"),Int 1));
@@ -71,7 +91,44 @@ val foldri = LetRec
                                       ))))))],
                   Var ($ "g")
                  )
+val tabulate = LetRec 
+                   (
+                    [($ "g", Abs ($ "l", Abs ($ "f", Abs ($ "n", 
+                                                          Cond (BinOp ($ "=",Var ($ "n"),Int 0),
+                                                                Var ($ "l"),
+                                                                (App
+                                                                     (App
+                                                                          (App (Var ($ "g"), 
+                                                                                (Con ($ "cons", 
+                                                                                      [App (Var ($ "f"), Var ($ "n")), 
+                                                                                       Var ($ "l")]))),
+                                                                           Var ($ "f")),
+                                                                      BinOp ($ "-", Var ($ "n"), Int 1)))
+                                                               ))
+                                                     ))
+                    )],
+                    App (Var ($ "g"), Con ($ "nil",[]))
+                   )
+
+val tabulate1 = Let ($ "tabulate", tabulate,
+                     (App
+                      (App (Var ($ "tabulate"),
+                            Abs ($ "i", BinOp ($ "*", Var ($ "i"), Int 10))),
+                       Int 10))
+                     )
 
 val _ = eval fak E
+val _ = compile fak
+
 val _ = eval foldri E
+val _ = compile foldri
+
+val _ = eval tabulate E
+val _ = compile tabulate
+
+val _ = (myapp ((fn i => putStr (TextIO.stdOut, ((Int.toString i) ^ " "))) o toInt) 
+               (eval tabulate1 E);
+         putStrLn (TextIO.stdOut, ""))
+
+val _ = compile tabulate1
 
