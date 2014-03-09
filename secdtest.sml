@@ -21,6 +21,15 @@
 
 *)
 
+fun timing (action) = 
+    let
+        val timer = Timer.startCPUTimer ()
+        val result = action ()
+        val times = Timer.checkCPUTimer timer
+    in
+        (result, Time.+ (#usr times, #sys times))
+    end
+
 fun putStrLn (file, str) = 
     (TextIO.output (file, str);
      TextIO.output (file, "\n"))
@@ -70,8 +79,8 @@ val _ = eval recd E
 val _ = case eval math1 E of
             Real r => print ("eval math1 = " ^ (Real.toString r) ^ "\n")
 
-val _ = compile math1
-val _ = compile recd
+val _ = compile math1 []
+val _ = compile recd []
 
 (* recursive functions *)
 val fak   = LetRec 
@@ -118,17 +127,23 @@ val tabulate1 = Let ($ "tabulate", tabulate,
                      )
 
 val _ = eval fak E
-val _ = compile fak
+val _ = compile fak []
 
 val _ = eval foldri E
-val _ = compile foldri
+val _ = compile foldri []
 
 val _ = eval tabulate E
-val _ = compile tabulate
+val _ = compile tabulate []
 
-val _ = (myapp ((fn i => putStr (TextIO.stdOut, ((Int.toString i) ^ " "))) o toInt) 
-               (eval tabulate1 E);
-         putStrLn (TextIO.stdOut, ""))
+val (t,ti) = timing (fn () => (myapp ((fn i => putStr (TextIO.stdOut, ((Int.toString i) ^ " "))) o toInt) 
+                                     (eval tabulate1 E);
+                               putStrLn (TextIO.stdOut, "")))
+val _ = print ("tabulate example evaluation took " ^ (Time.toString ti) ^ " s\n")
 
-val _ = compile tabulate1
+val (t,ti) = timing (fn () => (let 
+                                   val insns = compile tabulate1 []
+                               in
+                                   secd insns
+                               end))
+val _ = print ("compiled tabulate example simulation took " ^ (Time.toString ti) ^ " s\n")
 
