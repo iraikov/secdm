@@ -41,15 +41,25 @@ open SECD
 
 val $ = Symbol.symbol
 
-fun toInt v = case v of Int i => i | _ => raise Match
+fun etoInt v = case v of Int i => i | _ => raise Match
 
-fun myapp f lst = 
-    case lst of Con (c,[x,y]) => 
-                if c=($ "cons") 
-                then (f x; myapp f y) else raise Match
-              | Con (c,[]) =>
-                if c=($ "nil") then () else raise Match
-              | _ => raise Match
+fun eapp f v = 
+    case v of Con (c,[x,y]) => 
+              if c=($ "cons") 
+                then (f x; eapp f y) else raise Match
+            | Con (c,[]) =>
+              if c=($ "nil") then () else raise Match
+            | _ => raise Match
+
+fun vtoInt v = case v of I i => i | _ => raise Match
+
+fun vapp f v = 
+    case v of T (c,[x,y]) => 
+              if c=($ "cons") 
+                then (f x; vapp f y) else raise Match
+            | T (c,[]) =>
+              if c=($ "nil") then () else raise Match
+            | _ => raise Match
                                      
 
 
@@ -61,10 +71,15 @@ val plus  = Abs ($ "x",Abs ($ "y",BinOp ($ "+",Var ($ "x"),Var ($ "y"))));
 val twice = Abs ($ "f",Abs ($ "x",App (Var ($ "f"), App (Var ($ "f"),Var ($ "x")))));
 val comp  = Abs ($ "f",Abs ($ "g",Abs ($ "x",App (Var ($ "f"), App (Var ($ "g"),Var ($ "x"))))));
 
-val recd  = BinOp ($ "rsel",
+val recd1 = BinOp ($ "rsel",
                    Label ($ "x"), 
                    Con ($ "$", [Con ($ "x",[BinOp ($ "+",Int 1,Int 2)]),
                                 Con ($ "y",[BinOp ($ "+",Int 3,Int 4)])]))
+
+val recd2 = Let ($ "f", Abs ($ "r", BinOp ($ "rsel", Label ($ "x"), Var ($ "r"))),
+                 App (Var ($ "f"),
+                      Con ($ "$", [Con ($ "x",[BinOp ($ "+",Int 1,Int 2)]),
+                                   Con ($ "y",[BinOp ($ "+",Int 3,Int 4)])])))
 
 val math1   = UnOp ($ "sin",Real 60.0);
 
@@ -75,12 +90,31 @@ val _ = eval pred E
 val _ = eval plus E
 val _ = eval twice E
 val _ = eval comp E
-val _ = eval recd E
+
+val _ = case eval recd1 E of
+            Int i => print ("eval recd1 = " ^ (Int.toString i) ^ "\n")
+val _ = case eval recd2 E of
+            Int i => print ("eval recd1 = " ^ (Int.toString i) ^ "\n")
 val _ = case eval math1 E of
             Real r => print ("eval math1 = " ^ (Real.toString r) ^ "\n")
 
-val _ = compile math1 []
-val _ = compile recd []
+val _ = let val insns = compile math1 []
+            val res :: _ = secd insns
+        in
+            putStrLn (TextIO.stdOut, "secd math1 = " ^ (valueString res))
+        end
+
+val _ = let val insns = compile recd1 []
+            val res :: _ = secd insns
+        in
+            putStrLn (TextIO.stdOut, "secd recd1 = " ^ (valueString res))
+        end
+
+val _ = let val insns = compile recd2 []
+            val res :: _ = secd insns
+        in
+            putStrLn (TextIO.stdOut, "secd recd2 = " ^ (valueString res))
+        end
 
 (* recursive functions *)
 val fak   = LetRec 
@@ -102,22 +136,36 @@ val foldri = LetRec
                  )
 val tabulate = LetRec 
                    (
-                    [($ "g", Abs ($ "l", Abs ($ "f", Abs ($ "n", 
-                                                          Cond (BinOp ($ "=",Var ($ "n"),Int 0),
-                                                                Var ($ "l"),
-                                                                (App
-                                                                     (App
-                                                                          (App (Var ($ "g"), 
-                                                                                (Con ($ "cons", 
-                                                                                      [App (Var ($ "f"), Var ($ "n")), 
-                                                                                       Var ($ "l")]))),
-                                                                           Var ($ "f")),
-                                                                      BinOp ($ "-", Var ($ "n"), Int 1)))
-                                                               ))
-                                                     ))
+                    [($ "g", 
+                      Abs ($ "l", 
+                           Abs ($ "f", 
+                                Abs ($ "n", 
+                                     Cond (BinOp ($ "=",Var ($ "n"),Int 0),
+                                           Var ($ "l"),
+                                           (App
+                                                (App
+                                                     (App (Var ($ "g"), 
+                                                           (Con ($ "cons", 
+                                                                 [App (Var ($ "f"), Var ($ "n")), 
+                                                                  Var ($ "l")]))),
+                                                      Var ($ "f")),
+                                                 BinOp ($ "-", Var ($ "n"), Int 1)))
+                                    ))
+                          ))
                     )],
                     App (Var ($ "g"), Con ($ "nil",[]))
                    )
+
+val fak1 = Let ($ "fak", fak, (App (Var ($ "fak"), Int 10)))
+
+val _ = case eval fak1 E of
+            Int i => print ("eval fak1 = " ^ (Int.toString i) ^ "\n")
+
+val _ = let val insns = compile fak1 []
+            val res :: _ = secd insns
+        in
+            putStrLn (TextIO.stdOut, "secd fak1 = " ^ (valueString res))
+        end
 
 val tabulate1 = Let ($ "tabulate", tabulate,
                      (App
@@ -135,15 +183,17 @@ val _ = compile foldri []
 val _ = eval tabulate E
 val _ = compile tabulate []
 
-val (t,ti) = timing (fn () => (myapp ((fn i => putStr (TextIO.stdOut, ((Int.toString i) ^ " "))) o toInt) 
+val (t,ti) = timing (fn () => (eapp ((fn i => putStr (TextIO.stdOut, ((Int.toString i) ^ " "))) o etoInt) 
                                      (eval tabulate1 E);
                                putStrLn (TextIO.stdOut, "")))
 val _ = print ("tabulate example evaluation took " ^ (Time.toString ti) ^ " s\n")
 
 val (t,ti) = timing (fn () => (let 
                                    val insns = compile tabulate1 []
+                                   val res :: _ = secd insns
                                in
-                                   secd insns
+                                   (vapp ((fn s => putStr (TextIO.stdOut, (s ^ " "))) o valueString) res;
+                                    putStrLn (TextIO.stdOut, ""))
                                end))
 val _ = print ("compiled tabulate example simulation took " ^ (Time.toString ti) ^ " s\n")
 
