@@ -2,6 +2,7 @@ signature SYMBOL =
 sig
   eqtype symbol
   val symbol : string -> symbol
+  val fresh : string -> symbol
   val name : symbol -> string
   val toInt : symbol -> int
   type 'a table
@@ -38,6 +39,16 @@ struct
 		      H.insert hashtable (name,i);
 		      (name,i)
 		  end
+
+  fun fresh prefix =
+      let
+          val i = !nextsym
+          val s = (prefix ^ (Int.toString i))
+      in 
+          nextsym := i+1;
+	  H.insert hashtable (s,i);
+	  (s,i)
+      end
 
   fun name(s,n) = s
   fun toInt(s,n) = n

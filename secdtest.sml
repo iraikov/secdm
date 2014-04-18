@@ -171,7 +171,7 @@ val tabulate1 = Let ($ "tabulate", tabulate,
                      (App
                       (App (Var ($ "tabulate"),
                             Abs ($ "i", BinOp ($ "*", Var ($ "i"), Int 10))),
-                       Int 10))
+                       Int 10000))
                      )
 
 val _ = eval fak E
@@ -195,5 +195,6 @@ val (t,ti) = timing (fn () => (let
                                    (vapp ((fn s => putStr (TextIO.stdOut, (s ^ " "))) o valueString) res;
                                     putStrLn (TextIO.stdOut, ""))
                                end))
+
 val _ = print ("compiled tabulate example simulation took " ^ (Time.toString ti) ^ " s\n")
 

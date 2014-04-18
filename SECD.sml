@@ -1,6 +1,8 @@
 
-(* A compiler and interpreter for a small language for arithmetic expressions. 
-   Based on code by O Danvy.
+(* 
+
+ A compiler and interpreter for a small language for arithmetic expressions. 
+ Based on code by O Danvy.
 
  Copyright 2014 Ivan Raikov and the Okinawa Institute of
  Science and Technology.
@@ -18,18 +20,20 @@
  A full copy of the GPL license can be found at
  <http://www.gnu.org/licenses/>.
 
-
 *)
 
 
 structure SECD =
 struct
 
+
 type 'a lazy = unit -> 'a
 fun force (f:'a lazy) = f () 
 
+
 type var = Symbol.symbol
 type label = Symbol.symbol
+
 
 datatype expr =
     Int    of int
@@ -220,14 +224,14 @@ datatype value =
   | B  of bool
   | R  of real
   | T  of label * value list
-  | CL of code list * value dummy list
+  | CL of label * code list * value dummy list
   | UNDEF
 
 
 and code = 
     LD   of value (* pushes a literal onto the stack *)
   | LDV  of int   (* pushes the value of a variable onto the stack *)
-  | LDC  of code list (* pushes a closure onto the stack *)
+  | LDC  of label * code list (* pushes a closure onto the stack *)
   | LDT  of label * int
   | APP  
   | RAP  of int  (* recursive app; replaces the dummy environment with the current one *)
@@ -254,8 +258,22 @@ fun valueString v =
       | R r => ("R " ^ (Real.toString r))
       | T (c,lst) => ("T [" ^ (Symbol.name c) ^ "](" ^
                       (String.concatWith "," (map valueString lst)) ^ ")")
-      | CL _ => "CL"
+      | CL (l,_,_) => "CL " ^ (Symbol.name l)
       | UNDEF => "UNDEF"
+
+fun codeString c =
+    case c of 
+        LD v      => ("LD " ^ (valueString v))
+      | LDV i     => ("LDV " ^ (Int.toString i))    
+      | LDC (l,cl) => ("LDC (" ^ (Symbol.name l) ^ ") [" ^ (String.concatWith ", " (map codeString cl)) ^ "]") 
+      | LDT (l,i) => ("LDT (" ^ (Symbol.name l) ^ ", " ^ (Int.toString i) ^ ")")
+      | APP       =>  ("APP")
+      | RAP i     =>  ("RAP " ^ (Int.toString i))
+      | DUM i     =>  ("DUM " ^ (Int.toString i))
+      | COND (cl1,cl2)  =>  ("COND [" ^ (String.concatWith ", " (map codeString cl1)) ^ 
+                             ", " ^ (String.concatWith ", " (map codeString cl2)) ^ "]")
+      | RET       =>  ("RET")
+      | _         =>  ("PRIM")
 
 
 val take = List.take
@@ -276,7 +294,7 @@ fun mkdummy 0 E = E
 
 fun upddummy [] E              = ()
  |  upddummy (x::l) (Dum v::E) = (v:=x; upddummy l E)
- | upddummy _ _ = raise Match
+ |  upddummy _ _ = raise Match
 
 
 fun rselv fld (T (fld',[v]) :: rst) =
@@ -338,9 +356,9 @@ fun mathop (code, x) =
 
 fun step (S,E,LD  x::C,D)                 = (x::S,E,C,D)
  |  step (S,E,LDV k::C,D)                 = (norm (index k E)::S,E,C,D)
- |  step (S,E,LDC C'::C,D)                = (CL (C',E)::S,E,C,D)
+ |  step (S,E,LDC (l,C')::C,D)            = (CL (l,C',E)::S,E,C,D)
  |  step (S,E,LDT (c,n)::C,D)             = (T (c,rev (take (S,n)))::(drop (S,n)),E,C,D)
- |  step (CL (C',E')::x::S,E,APP::C,D)    = ([],Val x::E',C',(S,E,C)::D)
+ |  step (CL (_,C',E')::x::S,E,APP::C,D)  = ([],Val x::E',C',(S,E,C)::D)
  |  step (y::x::S,E, ADD::C,D)            = (alop (ADD,x,y)::S,E,C,D)
  |  step (y::x::S,E, SUB::C,D)            = (alop (SUB,x,y)::S,E,C,D)
  |  step (y::x::S,E,MULT::C,D)            = (alop (MULT,x,y)::S,E,C,D)
@@ -356,7 +374,8 @@ fun step (S,E,LD  x::C,D)                 = (x::S,E,C,D)
  |  step (B false::S,E,COND (C1,C2)::C,D) = (S,E,C2,([],[],C)::D)
  |  step (S,E,[RET],(_,_,C)::D)           = (S,E,C,D)
  |  step (S,E,DUM n::C,D)                 = (S,mkdummy n E,C,D)
- |  step (CL (C',E')::S,E,RAP n::C,D)     = (upddummy (rev (take(S,n))) E; (S,E,C',(drop (S,n),drop (E,n),C)::D))
+ |  step (CL (l,C',E')::S,E,RAP n::C,D)   = (upddummy (rev (take (S,n))) E; 
+                                             (S,E,C',(drop (S,n),drop (E,n),C)::D))
  |  step (x::S,E,[],(S',E',C')::D)        = (x::S',E',C',D)
  |  step (S,E,C,D)                        = raise Machine
 
@@ -434,16 +453,15 @@ fun compile (Int i)           N = [LD (I i)]
                                         | NONE => raise Compiler
                                   end
  |  compile (Cond (e,e1,e2))  N = compile e N@[COND (compile e1 N@[RET],compile e2 N@[RET])]
- |  compile (Abs (x,e))       N = [LDC (compile e (x::N))]
+ |  compile (Abs (x,e))       N = [LDC (Symbol.fresh "f", compile e (x::N))]
  |  compile (App (e,e'))      N = compile e' N@compile e N@[APP]
- |  compile (Let (x,e,e'))    N = compile e N@[LDC (compile e' (x::N)),APP]
- |  compile (LetRec (d,e))    N = 
-    let val n = length d
-        val N' = map #1 d@N
-        val ci = listConcat (map (fn (v,e)=>compile e N') d)
-     in
-        DUM n::ci@[LDC (compile e N'),RAP n]
-    end
+ |  compile (Let (x,e,e'))    N = compile e N@[LDC (Symbol.fresh "l", compile e' (x::N)),APP]
+ |  compile (LetRec (d,e))    N = let val n = length d
+                                      val N' = map #1 d@N
+                                      val ci = listConcat (map (fn (v,e)=>compile e N') d)
+                                  in
+                                      DUM n::ci@[LDC (Symbol.fresh "r", compile e N'),RAP n]
+                                  end
  |  compile (Clos (_,_))    N = raise Compiler
  |  compile (Label _)       N = raise Compiler
 
